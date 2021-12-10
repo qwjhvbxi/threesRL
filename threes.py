@@ -2,13 +2,16 @@
 """
 Created on Thu Nov 25 11:45:36 2021
 
-@author: iacob
+@author: Riccardo Iacobucci
 """
 import warnings
 import numpy as np
 
 warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 
+# one-hot encoding order: 
+# 1 2 3 6 12 24 48 96 192 384 768 1500 3000 6000 12000 -> 15
+# 4x4x15 planes
 
 def encodeboard(board):
     board0 = np.zeros([15,4,4],dtype=int);
@@ -22,7 +25,7 @@ def decodeboard(board,rang=np.arange(15)):
     outboard = np.matmul(np.moveaxis(board[rang,:,:],0,2),np.transpose(def_numbers[rang]));
     return outboard.astype(int);
 
-def movelr(board):
+def movelr(board): #this refers to only two direction (left-right), can be called two times for the 4 moves 
     
     helpermat = np.array([[1,2,3],[1,2,3],[1,2,3],[1,2,3]]);
     
@@ -77,45 +80,46 @@ class tre:
     
     def_numbers = np.concatenate(([1,2],np.exp2(np.arange(13))*3));
     
-    def __init__(self):
+    def __init__(self,simplified=False):
+        self.simplified = simplified;
         self.reset();
         
     def maxnum(self):
         maxnum_index = np.where(np.sum(self.board,(1,2)))[0].max();
         return self.def_numbers[maxnum_index];
         
-        
     def state(self):
         nextpiecevec = np.zeros((10,1));
         nextpiecevec[self.nextpiece-1] = 1;
         return np.append(self.board.flatten(),nextpiecevec);
-        
     
     def reset(self):
-        # 1 2 3 6 12 24 48 96 192 384 768 1500 3000 6000 12000 -> 15
-        # 4x4x15 planes
-        self.nextpiece = np.random.randint(1,4);
+        if self.simplified==True:
+            self.nextpiece = 3;
+            k = np.random.choice((-1,2),size=(4,4),p=(0.5,0.5));
+        else:
+            self.nextpiece = np.random.randint(1,4);
+            k = np.random.choice((-1,0,1,2),size=(4,4),p=(0.5,0.2,0.2,0.1));
+            
         board = np.zeros([15,4,4],dtype=int);
         
-        k = np.random.choice((-1,0,1,2),size=(4,4),p=(0.5,0.2,0.2,0.1));
         for i in range(0,4):
             for j in range(0,4):
                 if k[i,j]>=0:
                     board[k[i,j],i,j]=1;
                     
-        # board[0,0,3]=1;
-        # board[0,0,2]=1;
-        # board[1,0,1]=1;
-        # board[3,2,1]=1;
-        # board[3,2,2]=1;
         self.board = board;
         return self.state();
     
     def step(self,action):
         moved,done = self.nextmove(action);
         # reward = int(moved)*1.1 - 0.1;
-        reward = int(moved)*2 - 1;
+        reward = int(moved)*2 - 1; # negative reward for illegal moves
         return (self.state(),reward,done);
+    
+    def gioca(self,move):
+        moved,done = self.nextmove(move);
+        self.show();
     
     def nextmove(self,move): # 0,1,2,3 = L,R,U,D
         
@@ -144,12 +148,15 @@ class tre:
                  newb[move,0,nextpiece_pos] = self.nextpiece;
             
             self.board = encodeboard(newb[move,:,:]);
-            self.nextpiece = np.random.randint(1,4);
+            if self.simplified==True:
+                self.nextpiece = 3;
+            else:
+                self.nextpiece = np.random.randint(1,4);
+            
             
         return (moved,done)
     
-    
-    def possiblemoves(self): #this refers to only one direction, can be called multiple times for the 4 moves
+    def possiblemoves(self): 
         
         activelinesL,activelinesR,newbL,newbR = movelr(self.board);
         activelinesU,activelinesD,newbU,newbD = movelr(np.transpose(self.board,(0,2,1)));

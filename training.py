@@ -2,7 +2,7 @@
 """
 Created on Fri Nov 26 11:33:20 2021
 
-@author: iacob
+@author: Riccardo Iacobucci
 """
 
 import threes as game
