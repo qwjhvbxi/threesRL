@@ -78,6 +78,7 @@ def movelr(board): #this refers to only two direction (left-right), can be calle
 
 class tre:
     
+    scoreboard = np.append([0,0],np.power(3,np.arange(1,14)));
     def_numbers = np.concatenate(([1,2],np.exp2(np.arange(13))*3));
     
     def __init__(self,simplified=False):
@@ -109,6 +110,7 @@ class tre:
                     board[k[i,j],i,j]=1;
                     
         self.board = board;
+        self.score = np.sum(self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1));
         return self.state();
     
     def step(self,action):
@@ -153,6 +155,7 @@ class tre:
             else:
                 self.nextpiece = np.random.randint(1,4);
             
+            self.score = self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1)
             
         return (moved,done)
     
@@ -177,4 +180,3 @@ class tre:
         outboard = self.decode();
         print(outboard);
     
-
