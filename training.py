@@ -13,14 +13,14 @@ from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 
 
-# Configuration parameters for the whole setup
 gamma = 0.99  # Discount factor for past rewards
 max_steps_per_episode = 100;
 eps = np.finfo(np.float32).eps.item()  # Smallest number such that 1.0 + eps != 1.0
 
-env = game.tre();
+#env = game.tre(); # normal
+env = game.tre(1); # simplified
 
-num_inputs = 250 # 4*4*15 (board) + 10 (next piece: 1,2,3,6,6-12,12-96,...)
+num_inputs = 250 # binary variables. 4*4*15 = 240 (board) + 10 (next piece: 1,2,3,6,6-12,12-96,...)
 num_actions = 4
 # num_hidden1 = 250
 # num_hidden2 = 125
@@ -28,6 +28,7 @@ num_hidden1 = 125
 num_hidden2 = 125
 # num_hidden2 = 250
 
+# NN structure
 inputs = layers.Input(shape=(num_inputs,))
 common1 = layers.Dense(num_hidden1, activation="relu")(inputs)
 common2 = layers.Dense(num_hidden2, activation="relu")(common1)
@@ -46,12 +47,11 @@ episode_count = 0
 maxnum = 0;
 reward_progress = [];
 
-while True:  # Run until solved
+while True:
     state = env.reset();
     episode_reward = 0
     with tf.GradientTape() as tape:
         for timestep in range(1, max_steps_per_episode):
-        # while True: # run until lost
             
             state = tf.convert_to_tensor(state)
             state = tf.expand_dims(state, 0)
@@ -62,21 +62,22 @@ while True:  # Run until solved
             activelines,_ = env.possiblemoves();
             possiblemoves = np.sum(activelines,1)>0;
             
-            if np.sum(possiblemoves)==0:
+            if np.sum(possiblemoves)==0: # lost 
                 break
             
             else:
                 
-                # set illegal moves to 0 and renormalize
                 probs = np.squeeze(action_probs);
+                
+                ## set illegal moves to 0 and renormalize
                 # probs = probs*possiblemoves + 0.01;
                 # probs = probs/np.sum(probs);
     
-                # Sample action from action probability distribution
+                # sample action from action probability distribution
                 action = np.random.choice(num_actions, p=probs)
                 action_probs_history.append(tf.math.log(action_probs[0, action]))
     
-                # Apply the sampled action in our environment
+                # apply the sampled action
                 state, reward, done = env.step(action)
                 rewards_history.append(reward)
                 episode_reward += reward
@@ -144,6 +145,7 @@ while True:  # Run until solved
         
     if episode_count % 100 == 0:
         plt.plot(reward_progress)
+        plt.show();
 
     if running_reward > 195:  # Condition to consider the task solved
         print("Solved at episode {}!".format(episode_count))
