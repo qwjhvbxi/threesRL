@@ -4,10 +4,9 @@ Created on Thu Nov 25 11:45:36 2021
 
 @author: Riccardo Iacobucci
 """
-import warnings
+
 import numpy as np
 
-warnings.filterwarnings(action='ignore', message='All-NaN slice encountered')
 
 # one-hot encoding order: 
 # 1 2 3 6 12 24 48 96 192 384 768 1500 3000 6000 12000 -> 15
@@ -25,55 +24,43 @@ def decodeboard(board,rang=np.arange(15)):
     outboard = np.matmul(np.moveaxis(board[rang,:,:],0,2),np.transpose(def_numbers[rang]));
     return outboard.astype(int);
 
-def movelr(board): #this refers to only two direction (left-right), can be called two times for the 4 moves 
+def moveleft(board):
     
-    helpermat = np.array([[1,2,3],[1,2,3],[1,2,3],[1,2,3]]);
+    activelines = np.ones((4, 3), dtype=bool);
     
-    # moving
-    #mover = [[0,1,0,0],[0,0,1,0],[0,0,0,1],[0,0,0,1]];
-    b = np.sum(board,0);
-    # movinglines = np.matmul(b,mover);
-    # movablelines = (np.max(movinglines,1)==1);
-    
-    optmovesmat=b[:,0:3]-b[:,1:4];
-    optmovesL=optmovesmat<0;
-    optmovesR=optmovesmat>0;
-    
-    boardnum = decodeboard(board);
-    optpowersmat = decodeboard(board,np.arange(2,15));
-    optthreesmat = decodeboard(board,np.arange(0,2));
-    
-    optpowersmat = np.where(optpowersmat==0,np.nan,optpowersmat);
-    optpowers = (optpowersmat[:,0:3]-optpowersmat[:,1:4]==0);
-    
-    optthrees=optthreesmat[:,0:3]+optthreesmat[:,1:4]==3;
-    
-    optcombiL = (optthrees+optpowers+optmovesL)*helpermat;
-    optcombiR = (optthrees+optpowers+optmovesR)*helpermat;
-    
-    optcombiL = np.where(optcombiL==0,np.nan,optcombiL);
-    optcombiR = np.where(optcombiR==0,np.nan,optcombiR);
-    
-    activelinesL = np.nansum(optcombiL,1)>0;
-    activelinesR = np.nansum(optcombiR,1)>0;
-    
-    movementL = np.nanmin(optcombiL,1).astype(int)-1;
-    movementR = np.nanmax(optcombiR,1).astype(int)-1;
-    
-    newbL = np.copy(boardnum);
-    newbR = np.copy(boardnum);
-    
-    for i in range(0,4):
-        if activelinesL[i]:
-            newbL[i,movementL[i]:3] = boardnum[i,movementL[i]+1:];
-            newbL[i,movementL[i]] = boardnum[i,movementL[i]] + boardnum[i,movementL[i]+1];
-            newbL[i,3]=0;
-        if activelinesR[i]:
-            newbR[i,1:movementR[i]+1] = boardnum[i,0:movementR[i]];
-            newbR[i,movementR[i]+1] = boardnum[i,movementR[i]] + boardnum[i,movementR[i]+1];
-            newbR[i,0]=0;
+    for i in [0,1,2,3]:
+        
+        for k in [0,1,2]:
+        
+            # check if 1 2
+            new3 = (board[0,i,k]^board[0,i,k+1]) & (board[1,i,k]^board[1,i,k+1]);
             
-    return (activelinesL,activelinesR,newbL,newbR); 
+            if new3:
+                board[0:2,i,k:k+2] = 0;
+                board[2,i,k] = 1;
+            else:
+                
+                # check if any same number
+                newup = board[2:,i,k] & board[2:,i,k+1];
+                
+                if np.sum(newup)>0: 
+                    board[2,i,k] = 0;
+                    board[3:,i,k] = newup[0:12];
+                    board[2:,i,k+1] = 0;
+                else:
+                    
+                    # check if movement
+                    mov = np.any(board[:,i,k]);
+                    mov2 = np.any(board[:,i,k+1]);
+                    
+                    if mov2 and not mov:
+                        board[:,i,k] = board[:,i,k+1];
+                        board[:,i,k+1] = 0;
+                    else:
+                        activelines[i,k] = False;
+                        
+    return (np.any(activelines,1),board);
+
 
 
 class tre:
@@ -140,16 +127,17 @@ class tre:
         else:
             nextpiece_pos = np.random.choice(4,1,p=activelines[move]/numactivelines);
             
+            # WARNING! Temporary solution: only works with nextpiece=1,2,3 
             if move==0:
-                 newb[move,nextpiece_pos,3] = self.nextpiece;
+                 newb[move,self.nextpiece-1,nextpiece_pos,3] = 1;
             if move==1:
-                 newb[move,nextpiece_pos,0] = self.nextpiece;
+                 newb[move,self.nextpiece-1,nextpiece_pos,0] = 1;
             if move==2:
-                 newb[move,3,nextpiece_pos] = self.nextpiece;
+                 newb[move,self.nextpiece-1,3,nextpiece_pos] = 1;
             if move==3:
-                 newb[move,0,nextpiece_pos] = self.nextpiece;
+                 newb[move,self.nextpiece-1,0,nextpiece_pos] = 1;
             
-            self.board = encodeboard(newb[move,:,:]);
+            self.board = newb[move,:,:,:];
             if self.simplified==True:
                 self.nextpiece = 3;
             else:
@@ -159,16 +147,19 @@ class tre:
             
         return (moved,done)
     
-    def possiblemoves(self): 
+    def possiblemoves(self):
         
-        activelinesL,activelinesR,newbL,newbR = movelr(self.board);
-        activelinesU,activelinesD,newbU,newbD = movelr(np.transpose(self.board,(0,2,1)));
+        activelinesL,newbL = moveleft(np.copy(self.board));
+        activelinesR,newbR = moveleft(np.flip(np.copy(self.board),2));
+        activelinesU,newbU = moveleft(np.rot90(np.copy(self.board),1,(1,2)));
+        activelinesD,newbD = moveleft(np.rot90(np.copy(self.board),1,(2,1)));
         
-        newbU=np.transpose(newbU);
-        newbD=np.transpose(newbD);
+        newbR = np.flip(newbR,2);
+        newbU = np.rot90(newbU,1,(2,1));
+        newbD = np.rot90(newbD,1,(1,2));
         
-        activelines=np.stack((activelinesL,activelinesR,activelinesU,activelinesD));
-        newb=np.stack((newbL,newbR,newbU,newbD));
+        activelines = np.stack((activelinesL,activelinesR,np.flip(activelinesU),activelinesD));
+        newb = np.stack((newbL,newbR,newbU,newbD));
         
         return (activelines,newb);
         
@@ -180,3 +171,10 @@ class tre:
         outboard = self.decode();
         print(outboard);
     
+    
+    
+
+
+
+
+
