@@ -112,32 +112,43 @@ class tre:
     
     def nextmove(self,move): # 0,1,2,3 = L,R,U,D
         
-        activelines,newb = self.possiblemoves();
+        done = self.checkifdone();
         
-        numactivelinestotal = np.sum(activelines);
-        numactivelines = np.sum(activelines[move]);
-        done = False;
-        moved = True;
-        
-        if numactivelinestotal==0: # lost
-            done = True;
-            moved = False;
-        elif numactivelines==0: # not lost, but move is not allowed
-            moved = False;
-        else:
-            nextpiece_pos = np.random.choice(4,1,p=activelines[move]/numactivelines);
+        if not done:
             
-            # WARNING! Temporary solution: only works with nextpiece=1,2,3 
+            # WARNING! [nextpiece-1] is a temporary solution: only works with nextpiece=1,2,3 
             if move==0:
-                 newb[move,self.nextpiece-1,nextpiece_pos,3] = 1;
+                activelines,_ = moveleft(self.board);
+                moved = any(activelines);
+                if moved:
+                    nextpiece_pos = np.random.choice(4,1,p=activelines/np.sum(activelines));
+                    self.board[self.nextpiece-1,nextpiece_pos,3] = 1;
+                
             if move==1:
-                 newb[move,self.nextpiece-1,nextpiece_pos,0] = 1;
+                activelines,_ = moveleft(np.flip(self.board,2));
+                moved = any(activelines);
+                if moved:
+                    # self.board = np.flip(self.board,2);
+                    nextpiece_pos = np.random.choice(4,1,p=activelines/np.sum(activelines));
+                    self.board[self.nextpiece-1,nextpiece_pos,0] = 1;
+                 
             if move==2:
-                 newb[move,self.nextpiece-1,3,nextpiece_pos] = 1;
+                activelines,_ = moveleft(np.rot90(self.board,1,(1,2)));
+                moved = any(activelines);
+                if moved:
+                    nextpiece_pos = np.random.choice(4,1,p=activelines/np.sum(activelines));
+                    # self.board = np.rot90(self.board,1,(2,1));
+                    self.board[self.nextpiece-1,3,nextpiece_pos] = 1;
+ 
             if move==3:
-                 newb[move,self.nextpiece-1,0,nextpiece_pos] = 1;
+                activelines,_ = moveleft(np.rot90(self.board,1,(2,1)));
+                moved = any(activelines);
+                if moved:
+                    nextpiece_pos = np.random.choice(4,1,p=activelines/np.sum(activelines));
+                    # self.board = np.rot90(self.board,1,(1,2));
+                    self.board[self.nextpiece-1,0,nextpiece_pos] = 1;
             
-            self.board = newb[move,:,:,:];
+            # self.board = newb[move,:,:,:];
             if self.simplified==True:
                 self.nextpiece = 3;
             else:
@@ -145,7 +156,36 @@ class tre:
             
             self.score = self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1)
             
+        else:
+            moved = False;
+            
         return (moved,done)
+    
+    def checkifdone(self):
+        
+        done = False;
+        fullboard = np.all(np.any(self.board,0));
+        
+        if fullboard:
+            
+            # check if there are same numbers together
+            
+            samenum = (self.board[2:,0:3,:]+self.board[2:,1:4,:]>1).any() + (self.board[2:,:,0:3]+self.board[2:,:,1:4]>1).any()
+            
+            if not samenum :
+                
+                # check if there are 1 and 2 together
+                
+                onetwo = (((self.board[0,0:3,:] + self.board[1,1:4,:])>1).any() 
+                         | ((self.board[0,:,0:3] + self.board[1,:,1:4])>1).any()
+                         | ((self.board[1,0:3,:] + self.board[0,1:4,:])>1).any()
+                         | ((self.board[1,:,0:3] + self.board[0,:,1:4])>1).any());
+                
+                if not onetwo:
+                    
+                    done = True;
+            
+        return done;
     
     def possiblemoves(self):
         
@@ -170,8 +210,6 @@ class tre:
     def show(self):
         outboard = self.decode();
         print(outboard);
-    
-    
     
 
 
