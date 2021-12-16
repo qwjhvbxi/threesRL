@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
+import pickle
+import os
 
 # Configuration paramaters for the whole setup
 gamma = 0.99  # Discount factor for past rewards
@@ -24,11 +26,14 @@ epsilon_interval = (
 batch_size = 32  # Size of batch taken from replay buffer
 max_steps_per_episode = 100
 
-env = game.tre(1) # simplified
+simplified = 0; # play simplified game?
+
+env = game.tre(simplified) 
 
 num_inputs = 250 # binary variables. 4*4*15 = 240 (board) + 10 (next piece: 1,2,3,6,6-12,12-96,...)
 num_hidden1 = 125
-num_hidden2 = 125
+# num_hidden2 = 125
+num_hidden2 = 60
 num_actions = 4
 
 
@@ -52,6 +57,16 @@ model_target = create_q_model()
 optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
 
 
+checkpoint_filepath_status = 'tmp/checkpoint_status'
+checkpoint_filepath = 'tmp/checkpoint_weights'
+# checkpoint_filename = 'tmp/checkpoint.sav'
+# model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
+#     filepath=checkpoint_filepath,
+#     save_weights_only=False,
+#     monitor='val_accuracy',
+#     mode='max',
+#     save_best_only=False)
+
 
 # Experience replay buffers
 action_history = []
@@ -63,21 +78,34 @@ episode_reward_history = []
 running_reward = 0
 episode_count = 0
 frame_count = 0
+reward_progress = [];
+
+
+# load existing model
+if os.path.exists(checkpoint_filepath_status):
+    f = open(checkpoint_filepath_status,'rb');
+    action_history,state_history,state_next_history,rewards_history,done_history,episode_reward_history,running_reward,episode_count,frame_count,reward_progress = pickle.load(f)
+    f.close();    
+    model.load_weights(checkpoint_filepath)
+
+else:
+    f = open(checkpoint_filepath_status,'w+');
+    f.close();
+
+
 # Number of frames to take random action and observe output
 epsilon_random_frames = 500
 # Number of frames for exploration
 epsilon_greedy_frames = 1000
 # Maximum replay length
-# Note: The Deepmind paper suggests 1000000 however this causes memory issues
-max_memory_length = 10000
+max_memory_length = 1000
 # Train the model after 4 actions
 update_after_actions = 4
 # How often to update the target network
 update_target_network = 2000  # 10000   
 # Using huber loss for stability
 loss_function = keras.losses.Huber()
-reward_progress = [];
-
+maxnum = 0;
 
 
 while True:  # Run until solved
@@ -109,6 +137,11 @@ while True:  # Run until solved
         # Apply the sampled action in our environment
         state_next, reward, done = env.step(action)
         state_next = np.array(state_next)
+        
+        # env.show()
+        # print(reward)
+        
+        maxnum = np.max((maxnum,env.maxnum())).astype(int);
 
         episode_reward += reward
 
@@ -166,8 +199,18 @@ while True:  # Run until solved
             # update the the target network with new weights
             model_target.set_weights(model.get_weights())
             # Log details
-            template = "running reward: {:.2f} at episode {}, frame count {}"
-            print(template.format(running_reward, episode_count, frame_count))
+            template = "running reward: {:.2f} at episode {}, frame count {}, max number {}"
+            print(template.format(running_reward, episode_count, frame_count, maxnum))
+            maxnum = 0;
+            
+            # save model
+            # model.save_weights(checkpoint_path.format(epoch=0))
+            model.save_weights(checkpoint_filepath.format(epoch=0))
+            f = open(checkpoint_filepath_status,'wb');
+            pickle.dump([action_history,state_history,state_next_history,
+            rewards_history,done_history,episode_reward_history,
+            running_reward,episode_count,frame_count,reward_progress],f);
+            f.close();
 
         # Limit the state and reward history
         if len(rewards_history) > max_memory_length:
@@ -203,7 +246,7 @@ plt.plot(reward_progress)
 
 # plot
 state = env.reset()
-action_history = [];
+act_history = [];
 for timestep in range(1, max_steps_per_episode):
     
     #predictions = model.predict(state)
@@ -212,15 +255,15 @@ for timestep in range(1, max_steps_per_episode):
     state = tf.convert_to_tensor(state)
     state = tf.expand_dims(state, 0)
 
-    action_probs = model(state)
+    action_probs = model(state, training=False)
     
-    print(action_probs)
+    print(np.round(np.squeeze(action_probs),2))
     print(env.nextpiece)
 
     # Sample action from action probability distribution
     action = np.argmax(np.squeeze(action_probs))
     
-    action_history.append(action);
+    act_history.append(action);
 
     # Apply the sampled action in our environment
     state, reward, done = env.step(action)
