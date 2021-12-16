@@ -5,7 +5,6 @@ Created on Sat Dec 11 15:43:54 2021
 @author: Riccardo Iacobucci
 """
 
-# from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 import threes as game
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,58 +14,45 @@ from tensorflow.keras import layers
 import pickle
 import os
 
+
+checkpoint_filepath_status = 'tmp2/checkpoint_status'
+checkpoint_filepath = 'tmp2/checkpoint_weights'
+# reward_type = 0;
+
 # Configuration paramaters for the whole setup
 gamma = 0.99  # Discount factor for past rewards
 epsilon = 1.0  # Epsilon greedy parameter
 epsilon_min = 0.1  # Minimum epsilon greedy parameter
 epsilon_max = 1.0  # Maximum epsilon greedy parameter
-epsilon_interval = (
-    epsilon_max - epsilon_min
-)  # Rate at which to reduce chance of random action being taken
+epsilon_interval = (epsilon_max - epsilon_min)  # Rate at which to reduce chance of random action being taken
 batch_size = 32  # Size of batch taken from replay buffer
-max_steps_per_episode = 100
-
+max_steps_per_episode = 400;
 simplified = 0; # play simplified game?
+maxnum = 0; # max number reached
 
+# create environment 
 env = game.tre(simplified) 
 
+# create model
 num_inputs = 250 # binary variables. 4*4*15 = 240 (board) + 10 (next piece: 1,2,3,6,6-12,12-96,...)
 num_hidden1 = 125
-# num_hidden2 = 125
-num_hidden2 = 60
+num_hidden2 = 60 # 125
 num_actions = 4
-
 
 def create_q_model():
     inputs = layers.Input(shape=(num_inputs,))
     common1 = layers.Dense(num_hidden1, activation="relu")(inputs)
     common2 = layers.Dense(num_hidden2, activation="relu")(common1)
     action = layers.Dense(num_actions, activation="softmax")(common2)
-
     return keras.Model(inputs=inputs, outputs=action)
 
-
-# The first model makes the predictions for Q-values which are used to
-# make a action.
+# The first model makes the predictions for Q-values which are used to make a action.
 model = create_q_model()
 # Build a target model for the prediction of future rewards.
 # The weights of a target model get updated every 10000 steps thus when the
 # loss between the Q-values is calculated the target Q-value is stable.
 model_target = create_q_model()
-
-optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
-
-
-checkpoint_filepath_status = 'tmp/checkpoint_status'
-checkpoint_filepath = 'tmp/checkpoint_weights'
-# checkpoint_filename = 'tmp/checkpoint.sav'
-# model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-#     filepath=checkpoint_filepath,
-#     save_weights_only=False,
-#     monitor='val_accuracy',
-#     mode='max',
-#     save_best_only=False)
-
+optimizer = keras.optimizers.Adam(learning_rate=0.0001, clipnorm=1.0)
 
 # Experience replay buffers
 action_history = []
@@ -79,7 +65,6 @@ running_reward = 0
 episode_count = 0
 frame_count = 0
 reward_progress = [];
-
 
 # load existing model
 if os.path.exists(checkpoint_filepath_status):
@@ -105,7 +90,6 @@ update_after_actions = 4
 update_target_network = 2000  # 10000   
 # Using huber loss for stability
 loss_function = keras.losses.Huber()
-maxnum = 0;
 
 
 while True:  # Run until solved
@@ -138,6 +122,11 @@ while True:  # Run until solved
         state_next, reward, done = env.step(action)
         state_next = np.array(state_next)
         
+        if timestep==max_steps_per_episode-1:
+            reward = env.score;
+            print('finished')
+        
+        # # debug output
         # env.show()
         # print(reward)
         
@@ -199,8 +188,8 @@ while True:  # Run until solved
             # update the the target network with new weights
             model_target.set_weights(model.get_weights())
             # Log details
-            template = "running reward: {:.2f} at episode {}, frame count {}, max number {}"
-            print(template.format(running_reward, episode_count, frame_count, maxnum))
+            template = "running reward: {:.2f} at episode {}, frame count {}, max number {}, frames per game {}"
+            print(template.format(running_reward, episode_count, frame_count, maxnum, np.round(frame_count/episode_count,1)))
             maxnum = 0;
             
             # save model
@@ -232,19 +221,18 @@ while True:  # Run until solved
 
     episode_count += 1
 
-    if running_reward > 99:  # Condition to consider the task solved
+    if running_reward > 5000:#99:  # Condition to consider the task solved
         print("Solved at episode {}!".format(episode_count))
         break
     
     reward_progress.append(running_reward);
     
 
-
-
+# plot reward evolution
 plt.plot(reward_progress)
 
 
-# plot
+# play a sample game
 state = env.reset()
 act_history = [];
 for timestep in range(1, max_steps_per_episode):

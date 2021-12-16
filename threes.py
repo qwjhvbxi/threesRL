@@ -62,6 +62,10 @@ def moveleft(board):
     return (np.any(activelines,1),board);
 
 
+thissetup='''
+import threes;
+g=threes.tre();
+'''
 
 class tre:
     
@@ -101,9 +105,18 @@ class tre:
         return self.state();
     
     def step(self,action):
+        
         moved,done = self.nextmove(action);
+        
         # reward = int(moved)*1.1 - 0.1;
-        reward = int(moved)*2 - 1; # negative reward for illegal moves
+        
+        # reward = int(moved)*2 - 1; # negative reward for illegal moves
+        
+        if done:
+            reward = self.score;
+        else:
+            reward = 0;
+        
         return (self.state(),reward,done);
     
     def gioca(self,move):
@@ -114,7 +127,7 @@ class tre:
         
         done = self.checkifdone();
         
-        if not done:
+        if not done:# and self.islegalmove(move):
             
             # WARNING! [nextpiece-1] is a temporary solution: only works with nextpiece=1,2,3 
             if move==0:
@@ -154,12 +167,64 @@ class tre:
             else:
                 self.nextpiece = np.random.randint(1,4);
             
-            self.score = self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1)
+            self.score = np.sum(self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1));
             
         else:
             moved = False;
             
         return (moved,done)
+    
+    def islegalmove(self,move):
+        
+        c = (self.board.any(0)).astype(int);
+        
+        if move<2:
+        
+            clr = (c[:,1:4] - c[:,0:3]);
+            
+            if move==0:
+                
+                # move left
+                moving = (clr>0).any()
+            
+            else:
+                
+                # move right
+                moving = (clr<0).any()
+            
+            if moving:
+                
+                return True
+            
+            else:
+            
+                # same left right   # 1-2 left right
+                # return (self.board[2:,:,0:3] + self.board[2:,:,1:4]>1).any((0,2)) or (self.board[0,:,0:3] + self.board[1,:,1:4]>1).any(1) | (self.board[1,:,0:3] + self.board[0,:,1:4]>1).any(1)
+                return (self.board[2:,:,0:3] + self.board[2:,:,1:4]>1).any() or (self.board[0,:,0:3] + self.board[1,:,1:4]>1).any() | (self.board[1,:,0:3] + self.board[0,:,1:4]>1).any()
+                    
+        else:
+        
+            cud = (c[1:4,:] - c[0:3,:]);    
+            
+            if move==2:
+                
+                # move up
+                moving = (cud>0).any()
+            
+            else:
+        
+                # move down
+                moving = (cud<0).any()
+                
+            
+            if moving:
+                
+                return True
+            
+            else:
+            
+                # same up down   # 1-2 up down
+                return (self.board[2:,0:3,:]+self.board[2:,1:4,:]>1).any() or (self.board[0,0:3,:] + self.board[1,1:4,:]>1).any() | (self.board[1,0:3,:] + self.board[0,1:4,:]>1).any()
     
     def checkifdone(self):
         
