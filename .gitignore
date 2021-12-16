@@ -1,5 +1,4 @@
 
 *.pyc
-tests.py
-*.index
 tmp*
+test*
