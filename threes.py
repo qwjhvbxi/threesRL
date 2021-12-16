@@ -115,13 +115,15 @@ class tre:
         if done:
             reward = self.score;
         else:
-            reward = 0;
+            reward = -(1-int(moved))*1 ;
+            # reward = 0;
         
         return (self.state(),reward,done);
     
     def gioca(self,move):
         moved,done = self.nextmove(move);
         self.show();
+        print('next: {}'.format(self.nextpiece))
     
     def nextmove(self,move): # 0,1,2,3 = L,R,U,D
         
@@ -148,6 +150,7 @@ class tre:
             if move==2:
                 activelines,_ = moveleft(np.rot90(self.board,1,(1,2)));
                 moved = any(activelines);
+                activelines = np.flip(activelines);
                 if moved:
                     nextpiece_pos = np.random.choice(4,1,p=activelines/np.sum(activelines));
                     # self.board = np.rot90(self.board,1,(2,1));
@@ -161,11 +164,12 @@ class tre:
                     # self.board = np.rot90(self.board,1,(1,2));
                     self.board[self.nextpiece-1,0,nextpiece_pos] = 1;
             
-            # self.board = newb[move,:,:,:];
-            if self.simplified==True:
-                self.nextpiece = 3;
-            else:
-                self.nextpiece = np.random.randint(1,4);
+            if moved:
+                # self.board = newb[move,:,:,:];
+                if self.simplified==True:
+                    self.nextpiece = 3;
+                else:
+                    self.nextpiece = np.random.randint(1,4);
             
             self.score = np.sum(self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1));
             
