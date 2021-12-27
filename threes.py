@@ -86,12 +86,14 @@ class tre:
         return np.append(self.board.flatten(),nextpiecevec);
     
     def reset(self):
-        if self.simplified==True:
-            self.nextpiece = 3;
-            k = np.random.choice((-1,2),size=(4,4),p=(0.5,0.5));
-        else:
-            self.nextpiece = np.random.randint(1,4);
-            k = np.random.choice((-1,0,1,2),size=(4,4),p=(0.5,0.2,0.2,0.1));
+        k = -16;
+        while np.sum(k) < -10:
+            if self.simplified==True:
+                self.nextpiece = 3;
+                k = np.random.choice((-1,2),size=(4,4),p=(0.5,0.5));
+            else:
+                self.nextpiece = np.random.randint(1,4);
+                k = np.random.choice((-1,0,1,2),size=(4,4),p=(0.5,0.2,0.2,0.1));
             
         board = np.zeros([15,4,4],dtype=int);
         
@@ -115,8 +117,8 @@ class tre:
         if done:
             reward = self.score;
         else:
-            reward = -(1-int(moved))*1 ;
-            # reward = 0;
+            # reward = -(1-int(moved))*1 ;
+            reward = 0;
         
         return (self.state(),reward,done);
     
