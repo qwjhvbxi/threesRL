@@ -14,16 +14,18 @@ from tensorflow.keras import layers
 import pickle
 import os
 
+# foldername = 'tmp2'; # with -1 for illegal moves, 125-60 nodes
+# foldername = 'tmp3'; # with 0 for illegal moves
+foldername = 'tmp4'; # with 0 for illegal moves, more exploration
 
-checkpoint_filepath_status = 'tmp2/checkpoint_status'
-checkpoint_filepath = 'tmp2/checkpoint_weights'
-# reward_type = 0;
+checkpoint_filepath_status = foldername+'/checkpoint_status'
+checkpoint_filepath = foldername+'/checkpoint_weights'
 
 # Configuration paramaters for the whole setup
 gamma = 0.99  # Discount factor for past rewards
-epsilon = 1.0  # Epsilon greedy parameter
+epsilon = 0.9  # Epsilon greedy parameter
 epsilon_min = 0.1  # Minimum epsilon greedy parameter
-epsilon_max = 1.0  # Maximum epsilon greedy parameter
+epsilon_max = 0.9  # Maximum epsilon greedy parameter
 epsilon_interval = (epsilon_max - epsilon_min)  # Rate at which to reduce chance of random action being taken
 batch_size = 32  # Size of batch taken from replay buffer
 max_steps_per_episode = 400;
@@ -65,11 +67,12 @@ running_reward = 0
 episode_count = 0
 frame_count = 0
 reward_progress = [];
+maxnumber_progress = [];
 
 # load existing model
 if os.path.exists(checkpoint_filepath_status):
     f = open(checkpoint_filepath_status,'rb');
-    action_history,state_history,state_next_history,rewards_history,done_history,episode_reward_history,running_reward,episode_count,frame_count,reward_progress = pickle.load(f)
+    action_history,state_history,state_next_history,rewards_history,done_history,episode_reward_history,running_reward,episode_count,frame_count,reward_progress,maxnumber_progress = pickle.load(f)
     f.close();    
     model.load_weights(checkpoint_filepath)
 
@@ -79,9 +82,9 @@ else:
 
 
 # Number of frames to take random action and observe output
-epsilon_random_frames = 500
+epsilon_random_frames = 5000
 # Number of frames for exploration
-epsilon_greedy_frames = 1000
+epsilon_greedy_frames = 50000
 # Maximum replay length
 max_memory_length = 1000
 # Train the model after 4 actions
@@ -190,6 +193,7 @@ while True:  # Run until solved
             # Log details
             template = "running reward: {:.2f} at episode {}, frame count {}, max number {}, frames per game {}"
             print(template.format(running_reward, episode_count, frame_count, maxnum, np.round(frame_count/episode_count,1)))
+            maxnumber_progress.append(maxnum);
             maxnum = 0;
             
             # save model
@@ -198,7 +202,7 @@ while True:  # Run until solved
             f = open(checkpoint_filepath_status,'wb');
             pickle.dump([action_history,state_history,state_next_history,
             rewards_history,done_history,episode_reward_history,
-            running_reward,episode_count,frame_count,reward_progress],f);
+            running_reward,episode_count,frame_count,reward_progress,maxnumber_progress],f);
             f.close();
 
         # Limit the state and reward history
@@ -230,12 +234,13 @@ while True:  # Run until solved
 
 # plot reward evolution
 plt.plot(reward_progress)
-
+plt.plot(maxnumber_progress)
+plt.plot(reward_progress[30000:])
 
 # play a sample game
 state = env.reset()
 act_history = [];
-for timestep in range(1, max_steps_per_episode):
+for timestep in range(1, 60):#max_steps_per_episode):
     
     #predictions = model.predict(state)
     
