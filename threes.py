@@ -108,17 +108,24 @@ class tre:
     
     def step(self,action):
         
+        previousscore = self.score;
+        previouspiece = 3*(self.nextpiece==3);
+        
         moved,done = self.nextmove(action);
         
         # reward = int(moved)*1.1 - 0.1;
         
         # reward = int(moved)*2 - 1; # negative reward for illegal moves
         
-        if done:
-            reward = self.score;
-        else:
-            # reward = -(1-int(moved))*1 ;
-            reward = 0;
+        # if done:
+        #     reward = self.score;
+        # else:
+        #     # reward = -(1-int(moved))*1 ;
+        #     reward = 0;
+            
+        reward = -(1-int(moved))*1 + self.score - previousscore - previouspiece;
+        
+        # reward = self.score - previousscore - previouspiece;
         
         return (self.state(),reward,done);
     
