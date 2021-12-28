@@ -14,9 +14,30 @@ from tensorflow.keras import layers
 import pickle
 import os
 
+def movingavg(v,bucket=100):
+    v2 = [];
+    for i in range(1, len(v)):
+        if i < bucket:
+            v2.append(np.average(v[0:i]));
+        else:
+            v2.append(np.average(v[i-bucket:i]));
+    
+    return v2
+
 # foldername = 'tmp2'; # with -1 for illegal moves, 125-60 nodes
 # foldername = 'tmp3'; # with 0 for illegal moves
-foldername = 'tmp4'; # with 0 for illegal moves, more exploration
+# foldername = 'tmp4'; # with 0 for illegal moves, more exploration
+    # epsilon_random_frames = 5000
+    # epsilon_greedy_frames = 50000
+# foldername = 'tmp5'; # with 0 for illegal moves, even more exploration
+    # epsilon_random_frames = 50000
+    # epsilon_greedy_frames = 1000000
+# foldername = 'tmp6'; # reward based on difference in score
+    # epsilon_random_frames = 50000
+    # epsilon_greedy_frames = 1000000
+foldername = 'tmp7'; # reward based on adjusted difference in score and -1 for illegal moves
+    # epsilon_random_frames = 50000
+    # epsilon_greedy_frames = 1000000
 
 checkpoint_filepath_status = foldername+'/checkpoint_status'
 checkpoint_filepath = foldername+'/checkpoint_weights'
@@ -24,7 +45,7 @@ checkpoint_filepath = foldername+'/checkpoint_weights'
 # Configuration paramaters for the whole setup
 gamma = 0.99  # Discount factor for past rewards
 epsilon = 0.9  # Epsilon greedy parameter
-epsilon_min = 0.1  # Minimum epsilon greedy parameter
+epsilon_min = 0.05  # Minimum epsilon greedy parameter
 epsilon_max = 0.9  # Maximum epsilon greedy parameter
 epsilon_interval = (epsilon_max - epsilon_min)  # Rate at which to reduce chance of random action being taken
 batch_size = 32  # Size of batch taken from replay buffer
@@ -68,6 +89,7 @@ episode_count = 0
 frame_count = 0
 reward_progress = [];
 maxnumber_progress = [];
+printinfoframe = 2000;
 
 # load existing model
 if os.path.exists(checkpoint_filepath_status):
@@ -75,6 +97,7 @@ if os.path.exists(checkpoint_filepath_status):
     action_history,state_history,state_next_history,rewards_history,done_history,episode_reward_history,running_reward,episode_count,frame_count,reward_progress,maxnumber_progress = pickle.load(f)
     f.close();    
     model.load_weights(checkpoint_filepath)
+    model_target.set_weights(model.get_weights())
 
 else:
     f = open(checkpoint_filepath_status,'w+');
@@ -82,15 +105,15 @@ else:
 
 
 # Number of frames to take random action and observe output
-epsilon_random_frames = 5000
+epsilon_random_frames = 50000
 # Number of frames for exploration
-epsilon_greedy_frames = 50000
+epsilon_greedy_frames = 1000000
 # Maximum replay length
-max_memory_length = 1000
+max_memory_length = 10000
 # Train the model after 4 actions
 update_after_actions = 4
 # How often to update the target network
-update_target_network = 2000  # 10000   
+update_target_network = 10000  # 10000   
 # Using huber loss for stability
 loss_function = keras.losses.Huber()
 
@@ -100,8 +123,6 @@ while True:  # Run until solved
     episode_reward = 0
 
     for timestep in range(1, max_steps_per_episode):
-        # env.render(); Adding this line would show the attempts
-        # of the agent in a pop up window.
         frame_count += 1
 
         # Use epsilon-greedy for exploration
@@ -125,16 +146,6 @@ while True:  # Run until solved
         state_next, reward, done = env.step(action)
         state_next = np.array(state_next)
         
-        if timestep==max_steps_per_episode-1:
-            reward = env.score;
-            print('finished')
-        
-        # # debug output
-        # env.show()
-        # print(reward)
-        
-        maxnum = np.max((maxnum,env.maxnum())).astype(int);
-
         episode_reward += reward
 
         # Save actions and states in replay buffer
@@ -187,14 +198,16 @@ while True:  # Run until solved
             grads = tape.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
-        if frame_count % update_target_network == 0:
-            # update the the target network with new weights
-            model_target.set_weights(model.get_weights())
+        if frame_count % printinfoframe == 0:
             # Log details
             template = "running reward: {:.2f} at episode {}, frame count {}, max number {}, frames per game {}"
             print(template.format(running_reward, episode_count, frame_count, maxnum, np.round(frame_count/episode_count,1)))
             maxnumber_progress.append(maxnum);
             maxnum = 0;
+
+        if frame_count % update_target_network == 0:
+            # update the the target network with new weights
+            model_target.set_weights(model.get_weights())
             
             # save model
             # model.save_weights(checkpoint_path.format(epoch=0))
@@ -204,6 +217,11 @@ while True:  # Run until solved
             rewards_history,done_history,episode_reward_history,
             running_reward,episode_count,frame_count,reward_progress,maxnumber_progress],f);
             f.close();
+            print('checkpoint saved.')
+            
+            # plot reward evolution
+            plt.plot(reward_progress)
+            plt.show();
 
         # Limit the state and reward history
         if len(rewards_history) > max_memory_length:
@@ -213,7 +231,16 @@ while True:  # Run until solved
             del action_history[:1]
             del done_history[:1]
 
+        # if timestep==max_steps_per_episode-1:
+        #     reward = env.score;
+        #     maxnum = np.max((maxnum,env.maxnum())).astype(int);
+        #     print('finished')
+
+        maxnum = np.max((maxnum,env.maxnum())).astype(int);
+        
         if done:
+            # print(reward)
+            # maxnum = np.max((maxnum,env.maxnum())).astype(int);
             break
 
 
@@ -232,10 +259,26 @@ while True:  # Run until solved
     reward_progress.append(running_reward);
     
 
+# plot max number evolution
+plt.plot(maxnumber_progress)
+movavg = np.cumsum(maxnumber_progress)/np.arange(1,len(maxnumber_progress)+1)
+plt.plot(movavg)
+plt.show();
+
 # plot reward evolution
 plt.plot(reward_progress)
-plt.plot(maxnumber_progress)
-plt.plot(reward_progress[30000:])
+movavg = np.cumsum(reward_progress)/np.arange(1,len(reward_progress)+1)
+plt.plot(movavg)
+plt.show();
+
+plt.plot(reward_progress[len(reward_progress)-2000:])
+plt.plot(movavg[len(reward_progress)-2000:])
+plt.show();
+
+plt.plot(reward_progress)
+plt.plot(movingavg(reward_progress,1000))
+plt.show();
+
 
 # play a sample game
 state = env.reset()
