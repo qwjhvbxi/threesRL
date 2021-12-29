@@ -123,7 +123,7 @@ class tre:
         #     # reward = -(1-int(moved))*1 ;
         #     reward = 0;
             
-        reward = -(1-int(moved))*1 + self.score - previousscore - previouspiece;
+        reward = (1 - int(moved))*(-1) + (self.score - previousscore) - int(moved)*previouspiece;
         
         # reward = self.score - previousscore - previouspiece;
         
