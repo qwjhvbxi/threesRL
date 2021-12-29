@@ -11,10 +11,17 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 import matplotlib.pyplot as plt
+import pickle
+import os
+
+
+foldername = 'tmp10'; # reward based on adjusted difference in score and -1 for illegal moves
+checkpoint_filepath_status = foldername+'/checkpoint_status'
+checkpoint_filepath = foldername+'/checkpoint_weights'
 
 
 gamma = 0.99  # Discount factor for past rewards
-max_steps_per_episode = 100;
+max_steps_per_episode = 400;
 eps = np.finfo(np.float32).eps.item()  # Smallest number such that 1.0 + eps != 1.0
 
 #env = game.tre(); # normal
@@ -24,8 +31,8 @@ num_inputs = 250 # binary variables. 4*4*15 = 240 (board) + 10 (next piece: 1,2,
 num_actions = 4
 # num_hidden1 = 250
 # num_hidden2 = 125
-num_hidden1 = 125
-num_hidden2 = 125
+num_hidden1 = 250
+num_hidden2 = 250
 # num_hidden2 = 250
 
 # NN structure
@@ -39,6 +46,7 @@ model = keras.Model(inputs=inputs, outputs=[action, critic])
 
 optimizer = keras.optimizers.Adam(learning_rate=0.0001,clipnorm=1)
 huber_loss = keras.losses.Huber()
+
 action_probs_history = []
 critic_value_history = []
 rewards_history = []
@@ -46,6 +54,23 @@ running_reward = 0
 episode_count = 0
 maxnum = 0;
 reward_progress = [];
+maxnumber_progress = [];
+numfinished = 0;
+
+# load existing model
+if os.path.exists(checkpoint_filepath_status):
+    f = open(checkpoint_filepath_status,'rb');
+    action_probs_history,critic_value_history,rewards_history,running_reward,episode_count,reward_progress,maxnumber_progress = pickle.load(f)
+    f.close();    
+    model.load_weights(checkpoint_filepath)
+
+else:
+    f = open(checkpoint_filepath_status,'w+');
+    f.close();
+
+
+
+
 
 while True:
     state = env.reset();
@@ -59,31 +84,23 @@ while True:
             action_probs, critic_value = model(state)
             critic_value_history.append(critic_value[0, 0])
             
-            activelines,_ = env.possiblemoves();
-            possiblemoves = np.sum(activelines,1)>0;
+            probs = np.squeeze(action_probs);
             
-            if np.sum(possiblemoves)==0: # lost 
+            # sample action from action probability distribution
+            action = np.random.choice(num_actions, p=probs)
+            action_probs_history.append(tf.math.log(action_probs[0, action]))
+
+            # apply the sampled action
+            state, reward, done = env.step(action)
+            rewards_history.append(reward)
+            episode_reward += reward
+            
+            if timestep==max_steps_per_episode-1:
+                numfinished = numfinished + 1;
+                # print('finished')
+            
+            if done:
                 break
-            
-            else:
-                
-                probs = np.squeeze(action_probs);
-                
-                ## set illegal moves to 0 and renormalize
-                # probs = probs*possiblemoves + 0.01;
-                # probs = probs/np.sum(probs);
-    
-                # sample action from action probability distribution
-                action = np.random.choice(num_actions, p=probs)
-                action_probs_history.append(tf.math.log(action_probs[0, action]))
-    
-                # apply the sampled action
-                state, reward, done = env.step(action)
-                rewards_history.append(reward)
-                episode_reward += reward
-            
-            # if done:
-            #     break
             
         # Update running reward to check condition for solving
         running_reward = 0.05 * episode_reward + (1 - 0.05) * running_reward
@@ -139,19 +156,52 @@ while True:
     # Log details
     episode_count += 1
     if episode_count % 10 == 0:
-        template = "running reward: {:.2f} at episode {}. Max number: {}"
-        print(template.format(running_reward, episode_count, maxnum))
+        template = "running reward: {:.2f} at episode {}. Max number: {}. Num. finished: {}"
+        print(template.format(running_reward, episode_count, maxnum, numfinished))
+        maxnumber_progress.append(maxnum);
         maxnum = 0;
+        numfinished = 0;
         
     if episode_count % 100 == 0:
+        
+        # save model
+        # model.save_weights(checkpoint_path.format(epoch=0))
+        model.save_weights(checkpoint_filepath.format(epoch=0))
+        f = open(checkpoint_filepath_status,'wb');
+        pickle.dump([action_probs_history,critic_value_history,rewards_history,
+        running_reward,episode_count,reward_progress,maxnumber_progress],f);
+        f.close();
+        print('checkpoint saved.')
+        
         plt.plot(reward_progress)
         plt.show();
 
-    if running_reward > 195:  # Condition to consider the task solved
+    # Use with profiler
+    # if episode_count == 50:
+    #     break
+
+    if running_reward > 10000:  # Condition to consider the task solved
         print("Solved at episode {}!".format(episode_count))
         break
+
+
+def movingavg(v,bucket=100):
+    v2 = [];
+    for i in range(1, len(v)):
+        if i < bucket:
+            v2.append(np.average(v[0:bucket]));
+        else:
+            v2.append(np.average(v[i-bucket:i+bucket]));
     
+    return v2
+
 plt.plot(reward_progress)
+plt.plot(movingavg(reward_progress,250))
+plt.show()
+
+plt.plot(maxnumber_progress)
+plt.plot(movingavg(maxnumber_progress,100))
+plt.show()
 
 # plot
 state = env.reset()
@@ -163,13 +213,19 @@ for timestep in range(1, max_steps_per_episode):
     env.show();
     state = tf.convert_to_tensor(state)
     state = tf.expand_dims(state, 0)
-
+    
     action_probs, critic_value = model(state)
     
-    print(action_probs)
+    print(np.round(np.squeeze(action_probs),2))
+    print(np.round(np.squeeze(critic_value),2))
 
+    activelines,_ = env.possiblemoves();
+    possiblemoves = np.sum(activelines,1)>0;
+    
+    newmoves = (np.squeeze(action_probs)+0.0001)*possiblemoves;
+    
     # Sample action from action probability distribution
-    action = np.argmax(np.squeeze(action_probs))
+    action = np.argmax(newmoves)
     
     action_history.append(action);
 
