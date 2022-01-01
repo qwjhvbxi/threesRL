@@ -89,12 +89,10 @@ class tre:
         k = -16;
         while np.sum(k) < -10:
             if self.simplified==True:
-                self.nextpiece = 3;
                 k = np.random.choice((-1,2),size=(4,4),p=(0.5,0.5));
             else:
-                self.nextpiece = np.random.randint(1,4);
                 k = np.random.choice((-1,0,1,2),size=(4,4),p=(0.5,0.2,0.2,0.1));
-            
+        
         board = np.zeros([15,4,4],dtype=int);
         
         for i in range(0,4):
@@ -104,6 +102,8 @@ class tre:
                     
         self.board = board;
         self.score = np.sum(self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1));
+        self.setnextpiece();
+        
         return self.state();
     
     def step(self,action):
@@ -123,11 +123,16 @@ class tre:
         #     # reward = -(1-int(moved))*1 ;
         #     reward = 0;
             
-        reward = (1 - int(moved))*(-1) + (self.score - previousscore) - int(moved)*previouspiece;
+        # penalty for illegal move: 1
+        # reward for increase in score (minus automatic increase in cases when the next piece is 3)
+        # penalty for losing: 
+        reward = (1 - int(moved))*(-1) + (self.score - previousscore) - int(moved)*previouspiece - int(done)*99;
         
         # reward = self.score - previousscore - previouspiece;
         
-        return (self.state(),reward,done);
+        state = self.state();
+        
+        return (state,reward,done);
     
     def gioca(self,move):
         moved,done = self.nextmove(move);
@@ -175,18 +180,33 @@ class tre:
             
             if moved:
                 # self.board = newb[move,:,:,:];
-                if self.simplified==True:
-                    self.nextpiece = 3;
-                else:
-                    self.nextpiece = np.random.randint(1,4);
-            
+                self.setnextpiece();
+                
             self.score = np.sum(self.scoreboard*np.sum(np.sum(self.board[:,:,:],1),1));
             
         else:
             moved = False;
             
         return (moved,done)
-    
+
+    def setnextpiece(self):
+        
+        if self.simplified==True:
+            self.nextpiece = 3;
+        else:
+            
+            # self.nextpiece = np.random.randint(1,4);
+            
+            num1 = np.sum(self.board[0,:,:]);
+            num2 = np.sum(self.board[1,:,:]);
+            alpha = 0.5;
+            k = np.exp(alpha*(num2-num1));
+            prob1 = k / (k + 1);
+            prob2 = 1 - prob1;
+            
+            probvec = [prob1*2/3, prob2*2/3, 1/3];
+            self.nextpiece = np.random.choice([1,2,3],p=probvec);
+            
     def islegalmove(self,move):
         
         c = (self.board.any(0)).astype(int);
@@ -289,8 +309,3 @@ class tre:
         outboard = self.decode();
         print(outboard);
     
-
-
-
-
-
