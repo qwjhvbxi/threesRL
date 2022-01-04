@@ -2,4 +2,4 @@
 *.pyc
 tmp*
 test*
-old\*
+old/*
