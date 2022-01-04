@@ -14,26 +14,22 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 
+def running_mean(x, N):
+    cumsum = np.cumsum(np.insert(x, 0, 0)) 
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-foldername = 'tmp10'; # reward based on adjusted difference in score and -1 for illegal moves
-checkpoint_filepath_status = foldername+'/checkpoint_status'
-checkpoint_filepath = foldername+'/checkpoint_weights'
+# input: binary variables. 4*4*15 = 240 (board) + 10 (next piece: 1,2,3,6,6-12,12-96,...)
 
+# foldername = 'tmp10'; # simplified. reward based on adjusted difference in score and -1 for illegal moves
+foldername = 'tmp13'; # reward based on adjusted difference in score and -1 for illegal moves
 
-gamma = 0.99  # Discount factor for past rewards
-max_steps_per_episode = 400;
-eps = np.finfo(np.float32).eps.item()  # Smallest number such that 1.0 + eps != 1.0
+simplified = 0;
 
-#env = game.tre(); # normal
-env = game.tre(1); # simplified
-
-num_inputs = 250 # binary variables. 4*4*15 = 240 (board) + 10 (next piece: 1,2,3,6,6-12,12-96,...)
+## option 1: flat input
+num_inputs = 250
 num_actions = 4
-# num_hidden1 = 250
-# num_hidden2 = 125
 num_hidden1 = 250
 num_hidden2 = 250
-# num_hidden2 = 250
 
 # NN structure
 inputs = layers.Input(shape=(num_inputs,))
@@ -42,9 +38,19 @@ common2 = layers.Dense(num_hidden2, activation="relu")(common1)
 action = layers.Dense(num_actions, activation="softmax")(common2)
 critic = layers.Dense(1)(common2)
 
+checkpoint_filepath_status = foldername+'/checkpoint_status'
+checkpoint_filepath = foldername+'/checkpoint_weights'
+
+gamma = 0.99  # Discount factor for past rewards
+max_steps_per_episode = 2000;
+eps = np.finfo(np.float32).eps.item()  # Smallest number such that 1.0 + eps != 1.0
+
+#env = game.tre(); # normal
+env = game.tre(simplified); # simplified
+
 model = keras.Model(inputs=inputs, outputs=[action, critic])
 
-optimizer = keras.optimizers.Adam(learning_rate=0.0001,clipnorm=1)
+optimizer = keras.optimizers.Adam(learning_rate=0.00025,clipnorm=1)
 huber_loss = keras.losses.Huber()
 
 action_probs_history = []
@@ -52,25 +58,21 @@ critic_value_history = []
 rewards_history = []
 running_reward = 0
 episode_count = 0
-maxnum = 0;
 reward_progress = [];
 maxnumber_progress = [];
-numfinished = 0;
 
 # load existing model
 if os.path.exists(checkpoint_filepath_status):
-    f = open(checkpoint_filepath_status,'rb');
-    action_probs_history,critic_value_history,rewards_history,running_reward,episode_count,reward_progress,maxnumber_progress = pickle.load(f)
-    f.close();    
+    with open(checkpoint_filepath_status,'rb') as f:
+        action_probs_history,critic_value_history,rewards_history,running_reward,episode_count,reward_progress,maxnumber_progress = pickle.load(f)
     model.load_weights(checkpoint_filepath)
 
 else:
     f = open(checkpoint_filepath_status,'w+');
     f.close();
 
-
-
-
+maxnum = 0;
+numfinished = 0;
 
 while True:
     state = env.reset();
@@ -173,39 +175,46 @@ while True:
         f.close();
         print('checkpoint saved.')
         
-        plt.plot(reward_progress)
-        plt.show();
+        # print progress
+        avgmax = running_mean(maxnumber_progress,50);
+        fig, ax1 = plt.subplots()
+        ax2 = ax1.twinx()
+        ax1.plot(running_mean(reward_progress,100), 'k-')
+        ax1.grid(color='k', axis='y',linestyle='-', linewidth=0.1)
+        ax2.plot(np.linspace(0,len(reward_progress),num=len(avgmax)),avgmax, 'r-')
+        
+        # plt.plot(running_mean(reward_progress,100))
+        # plt.plot(np.linspace(0,len(reward_progress),num=len(avgmax)),avgmax)
+        plt.show()  
+        
+        # plt.plot(reward_progress)
+        # plt.show();
 
     # Use with profiler
     # if episode_count == 50:
     #     break
 
-    if running_reward > 10000:  # Condition to consider the task solved
+    if running_reward > 100000:  # Condition to consider the task solved
         print("Solved at episode {}!".format(episode_count))
         break
 
-
-def movingavg(v,bucket=100):
-    v2 = [];
-    for i in range(1, len(v)):
-        if i < bucket:
-            v2.append(np.average(v[0:bucket]));
-        else:
-            v2.append(np.average(v[i-bucket:i+bucket]));
-    
-    return v2
-
 plt.plot(reward_progress)
-plt.plot(movingavg(reward_progress,250))
+plt.plot(running_mean(reward_progress,500))
 plt.show()
+
+print(np.max(reward_progress))
+print(np.argmax(reward_progress))
 
 plt.plot(maxnumber_progress)
-plt.plot(movingavg(maxnumber_progress,100))
+plt.plot(running_mean(maxnumber_progress,100))
 plt.show()
 
-# plot
+
+
+# play a sample game
 state = env.reset()
 action_history = [];
+totalreward = 0;
 for timestep in range(1, max_steps_per_episode):
     
     #predictions = model.predict(state)
@@ -216,12 +225,11 @@ for timestep in range(1, max_steps_per_episode):
     
     action_probs, critic_value = model(state)
     
-    print(np.round(np.squeeze(action_probs),2))
-    print(np.round(np.squeeze(critic_value),2))
-
-    activelines,_ = env.possiblemoves();
-    possiblemoves = np.sum(activelines,1)>0;
+    value = (np.squeeze(critic_value)*100).astype(int)
+    print("Next: {} - Action probs: {} - Critic value: {} ".format(env.nextpiece,np.round(np.squeeze(action_probs),2),value/100))
     
+    activelines,_ = env.possiblemoves();
+    possiblemoves = np.sum(activelines,1)>0;    
     newmoves = (np.squeeze(action_probs)+0.0001)*possiblemoves;
     
     # Sample action from action probability distribution
@@ -232,7 +240,13 @@ for timestep in range(1, max_steps_per_episode):
     # Apply the sampled action in our environment
     state, reward, done = env.step(action)
     
+    print("Chosen move: {} - Reward: {}".format(action,reward))
+    
+    totalreward = totalreward+reward;
+    
+    
     if done:
         break
     
+print(totalreward)
 
